@@ -10,19 +10,105 @@ You can use Fabric samples to get started working with Hyperledger Fabric, explo
 
 To use the Fabric samples, you need to download the Fabric Docker images and the Fabric CLI tools. First, make sure that you have installed all of the [Fabric prerequisites](https://hyperledger-fabric.readthedocs.io/en/latest/prereqs.html). You can then follow the instructions to [Install the Fabric Samples, Binaries, and Docker Images](https://hyperledger-fabric.readthedocs.io/en/latest/install.html) in the Fabric documentation. In addition to downloading the Fabric images and tool binaries, the Fabric samples will also be cloned to your local machine.
 
-## Test network
+## Setup Veritas Test network
 
-The [Fabric test network](test-network) in the samples repository provides a Docker Compose based test network with two
-Organization peers and an ordering service node. You can use it on your local machine to run the samples listed below.
-You can also use it to deploy and test your own Fabric chaincodes and applications. To get started, see
-the [test network tutorial](https://hyperledger-fabric.readthedocs.io/en/latest/test_network.html).
+After you have setup all the HLF requirements, you can proceed to setup a Veritas Rollup TestNet. 
 
-The [Kubernetes Test Network](test-network-k8s) sample builds upon the Compose network, constructing a Fabric 
-network with peer, orderer, and CA infrastructure nodes running on Kubernetes.  In addition to providing a sample 
-Kubernetes guide, the Kube test network can be used as a platform to author and debug _cloud ready_ Fabric Client 
-applications on a development or CI workstation. 
+### Step 1: Setup Layer 1
+
+Bring up two peer nodes and an orderer node.
+
+```bash
+cd test-network
+./network.sh up
+```
+
+Now create a channel, l1, and make the two peer nodes join it. 
+
+```bash
+./network.sh createChannel -c l1
+```
+
+### Step 2: Setup Layer 2
+
+Now we need to setup an Org3 that will contain a sequencer peer node. First generate certs for Org3, and create an l2 channel.
+
+```bash
+cd test-network
+export PATH=${PWD}/../bin:$PATH
+export FABRIC_CFG_PATH=${PWD}/configtx
+
+cd addOrg3
+./addOrg3.sh generate
+
+cd ..
+configtxgen -profile L2Genesis -outputBlock ./channel-artifacts/l2.block -channelID l2
+export ORDERER_CA=${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+export ORDERER_ADMIN_TLS_SIGN_CERT=${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+export ORDERER_ADMIN_TLS_PRIVATE_KEY=${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.key
+osnadmin channel join --channelID l2 --config-block ./channel-artifacts/l2.block -o localhost:7053 --ca-file "$ORDERER_CA" --client-cert "$ORDERER_ADMIN_TLS_SIGN_CERT" --client-key "$ORDERER_ADMIN_TLS_PRIVATE_KEY"
+```
+
+Now bring up the Org3 peer and make it join the l2 channel.
+
+```bash
+cd addOrg3
+./addOrg3.sh up -c l2 
+```
+
+### Step 3: Install the State Contract
+
+The state contract manages the world state for the layer 2 rollup. Hence, it needs to be installed on the Org3 sequencer node. You can get the state contract from this [repo](https://github.com/veritas-L2/state-contract). 
+
+After cloning the state contract repo, setup it's dependencies:
+
+```bash
+cd state-contract
+
+#update the deps: HLF is unable to install this contract without this step at the moment. 
+go get -u
+
+#vendor deps
+GO111MODULE=on go mod vendor
+```
+
+Now go back to the `test-network` directory and install the contract chaincode.
+
+```bash
+cd test-network/
+export PATH=${PWD}/../bin:$PATH
+export FABRIC_CFG_PATH=$PWD/../config/
+
+#package the chaincode:
+peer lifecycle chaincode package <name>.tar.gz --path path/to/chaincode-in-go/ --lang golang --label <name>_1.0
+
+#act as the Org3 peer node:
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="Org3MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org3.example.com/users/Admin@org3.example.com/msp
+export CORE_PEER_ADDRESS=localhost:<PEER_PORT>
+
+#install chaincode
+peer lifecycle chaincode install <name>.tar.gz
 
 
+#Approve chaincode definition:
+#run the following command and copy the package id from the output:
+peer lifecycle chaincode queryinstalled
+
+#then:
+export CC_PACKAGE_ID=<PACKAGE_ID>
+
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID  l2 --name <name> --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+
+#Commit chaincode definition
+peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID l2 --name <name> --version 1.0 --sequence 1 --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem" --peerAddresses localhost:<PEER_PORT> --tlsRootCertFiles "${PWD}/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt" 
+```
+
+At this point, the state contract should be ready to receive invocations from applications and other chaincode on the l2 channel. 
+
+To install any chaincode on layer 2, follow the same chaincode installation steps described above.
 
 ## Asset transfer samples and tutorials
 
