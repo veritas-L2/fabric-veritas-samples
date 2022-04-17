@@ -186,7 +186,7 @@ func (s *SmartContract) TransferAsset(ctx contractapi.TransactionContextInterfac
 
 	InitStateContract(ctx)
 
-	err = PutState(id, assetJSON)
+	err = PutState(ctx, id, assetJSON)
 	if err != nil {
 		ReleaseStateContract(ctx)
 		return "", err
