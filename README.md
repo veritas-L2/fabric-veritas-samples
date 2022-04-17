@@ -79,7 +79,7 @@ cd test-network/
 export PATH=${PWD}/../bin:$PATH
 export FABRIC_CFG_PATH=$PWD/../config/
 
-go run veritas-cli.go -name=state-contract -version=1.0 -sequence=1 -channel=l2 -org=Org3 -peerPort=<Org3 peer port> install-chaincode 
+go run veritas-cli.go -name=state-contract -version=1.0 -sequence=1 -channel=l2 -org=Org3 -peerPort=<Org3 peer port> install-chaincode path/to/chaincode
 ```
 
 Note: sequence should be in increasing order for each sequential update to a chaincode.
