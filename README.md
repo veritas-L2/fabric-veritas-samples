@@ -79,32 +79,10 @@ cd test-network/
 export PATH=${PWD}/../bin:$PATH
 export FABRIC_CFG_PATH=$PWD/../config/
 
-#package the chaincode:
-peer lifecycle chaincode package <name>.tar.gz --path path/to/chaincode-in-go/ --lang golang --label <name>_1.0
-
-#act as the Org3 peer node:
-export CORE_PEER_TLS_ENABLED=true
-export CORE_PEER_LOCALMSPID="Org3MSP"
-export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt
-export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org3.example.com/users/Admin@org3.example.com/msp
-export CORE_PEER_ADDRESS=localhost:<PEER_PORT>
-
-#install chaincode
-peer lifecycle chaincode install <name>.tar.gz
-
-
-#Approve chaincode definition:
-#run the following command and copy the package id from the output:
-peer lifecycle chaincode queryinstalled
-
-#then:
-export CC_PACKAGE_ID=<PACKAGE_ID>
-
-peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID  l2 --name <name> --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
-
-#Commit chaincode definition
-peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID l2 --name <name> --version 1.0 --sequence 1 --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem" --peerAddresses localhost:<PEER_PORT> --tlsRootCertFiles "${PWD}/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt" 
+go run veritas-cli.go -name=state-contract -version=1.0 -sequence=1 -channel=l2 -org=Org3 -peerPort=<Org3 peer port> install-chaincode path/to/chaincode
 ```
+
+Note: sequence should be in increasing order for each sequential update to a chaincode.
 
 At this point, the state contract should be ready to receive invocations from applications and other chaincode on the l2 channel. 
 
